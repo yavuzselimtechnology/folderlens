@@ -1,0 +1,12 @@
+{
+  "name": "folderlens",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Temporary, fetchable AI views of browser-selected folders",
+  "scripts": {
+    "test": "node --check app.js && node --check git-reader.js && node tests/check_folder_import.js && node tests/check_local_changes.js && node tests/check_git_reader.js",
+    "test:browser": "node tests/check_browser.js"
+  },
+  "engines": { "node": ">=22" },
+  "devDependencies": { "playwright": "1.64.0" }
+}

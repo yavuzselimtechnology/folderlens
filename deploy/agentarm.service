@@ -1,0 +1,35 @@
+[Unit]
+Description=AgentArm ephemeral local workspace bridge
+After=network.target
+
+[Service]
+Type=simple
+User=agentarm
+Group=agentarm
+WorkingDirectory=/opt/agentarm/current
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/agentarm/venv/bin/uvicorn run:app --host 127.0.0.1 --port 8765 --workers 1 --proxy-headers --forwarded-allow-ips=127.0.0.1
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryHigh=768M
+MemoryMax=1G
+TasksMax=64
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

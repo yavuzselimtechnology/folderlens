@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#090b0f">
+  <meta name="description" content="Share a local folder as a lightweight, ordered AI reading view with FolderLens.">
+  <title>FolderLens · Your folder, readable by AI</title>
+  <link rel="stylesheet" href="/AgentArm/assets/styles.css">
+  <script src="/AgentArm/assets/git-reader.js" defer></script>
+  <script src="/AgentArm/assets/app.js" defer></script>
+</head>
+<body class="picker-page">
+  <main class="picker-shell">
+    <header class="picker-intro">
+      <span class="eyebrow">FolderLens</span>
+      <h1>Your project. Ready to read.</h1>
+      <p>Choose a folder, copy its AI View URL, and share it in your chat.
+        Read large documents in small, ordered parts.</p>
+    </header>
+    <div id="folderStage" class="folder-stage">
+      <div id="idlePet" class="idle-pet" aria-hidden="true">
+        <svg viewBox="0 0 128 96" role="presentation" focusable="false">
+          <g class="idle-pet-presence">
+            <g class="idle-pet-head">
+              <path class="idle-pet-ear" d="M31 42 36 20c1-4 5-5 8-2l14 14Z"/>
+              <path class="idle-pet-ear" d="m97 42-5-22c-1-4-5-5-8-2L70 32Z"/>
+              <path class="idle-pet-ear-inner" d="m38 31 2-8 9 9Z"/>
+              <path class="idle-pet-ear-inner" d="m90 31-2-8-9 9Z"/>
+              <path class="idle-pet-face" d="M26 60C26 38 42 26 64 26S102 38 102 60 86 92 64 92 26 82 26 60Z"/>
+              <g class="idle-pet-eyes">
+                <ellipse cx="49" cy="60" rx="9" ry="10"/>
+                <ellipse cx="79" cy="60" rx="9" ry="10"/>
+                <g class="idle-pet-pupils">
+                  <circle cx="50" cy="61" r="3.4"/>
+                  <circle cx="80" cy="61" r="3.4"/>
+                  <circle class="idle-pet-glint" cx="51.2" cy="59.7" r="1"/>
+                  <circle class="idle-pet-glint" cx="81.2" cy="59.7" r="1"/>
+                </g>
+              </g>
+              <circle class="idle-pet-cheek" cx="39" cy="72" r="3"/>
+              <circle class="idle-pet-cheek" cx="89" cy="72" r="3"/>
+            </g>
+          </g>
+        </svg>
+      </div>
+      <button id="chooseFolder" type="button">Choose Folder</button>
+      <div id="idlePetPaws" class="idle-pet-paws" aria-hidden="true">
+        <svg viewBox="0 0 128 30" role="presentation" focusable="false">
+          <rect class="idle-pet-paw" x="41.5" y="6.5" width="14.5" height="14.5" rx="7.25"/>
+          <rect class="idle-pet-paw" x="71.5" y="6.5" width="14.5" height="14.5" rx="7.25"/>
+          <path class="idle-pet-toes" d="M44 13v2.4M47.2 12.5v3M80.8 12.5v3M84 13v2.4"/>
+        </svg>
+      </div>
+    </div>
+    <input id="folderUpload" type="file" webkitdirectory multiple hidden>
+    <progress id="loadProgress" aria-label="Preparing project" hidden></progress>
+    <p id="status" role="status" aria-live="polite"></p>
+    <details id="excludedDetails" class="excluded-details" hidden>
+      <summary id="excludedSummary"></summary>
+      <div id="excludedGroups" class="excluded-groups"></div>
+      <p class="local-only-note">
+        These paths stay in this browser tab and are not published in the AI view.
+      </p>
+    </details>
+    <p class="sharing-note">Anyone with the view link can read the imported files.
+      Keep this tab open; access expires automatically. Protected and unsupported
+      files stay local.</p>
+    <noscript><p>JavaScript is required to select and publish a local folder.
+      Shared document readers work without JavaScript.</p></noscript>
+    <section id="workspace" class="workspace-card" hidden>
+      <div class="workspace-heading">
+        <div>
+          <span>Connected locally</span>
+          <h2 id="workspaceName"></h2>
+        </div>
+        <span id="connectionState" class="live-state">Live</span>
+      </div>
+      <p>
+        Keep this page open. Project data lives only in temporary memory and
+        expires automatically.
+      </p>
+      <div class="workspace-actions">
+        <a id="workspaceLink" target="_blank" rel="noopener">Open AI View</a>
+        <button id="copyView" type="button">Copy View URL</button>
+      </div>
+      <p id="uploadOnlyNote" hidden>Read-only folder upload. Files are shared as a snapshot;
+        select the folder again to include later changes. Local editing is unavailable in this mode.</p>
+      <details id="editPanel" class="edit-panel">
+        <summary>Apply AI changes <span>Optional</span></summary>
+        <p>Reading and sharing need no write access. Use this panel only to edit
+          files on your device. Review the AI change package before applying it.</p>
+        <div class="workspace-actions">
+          <button id="enableChanges" type="button">Enable Local Changes</button>
+          <button id="copyAccess" type="button">Copy Action Access</button>
+        </div>
+        <label for="changes">AI change package (JSON)</label>
+        <textarea id="changes" spellcheck="false" aria-describedby="applyHelp"
+          placeholder='{"format":"agentarm.changes.v1","title":"Update","operations":[]}'></textarea>
+        <p id="applyHelp">Writes or deletes the listed local files after checking their
+          original hashes. Then rebuilds the shared view; large folders take longer.</p>
+        <button id="applyChanges" type="button">Apply changes to local folder</button>
+      </details>
+      <p id="changeStatus" role="status" aria-live="polite"></p>
+    </section>
+  </main>
+</body>
+</html>
