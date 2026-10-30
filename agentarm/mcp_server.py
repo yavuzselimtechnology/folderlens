@@ -793,6 +793,7 @@ def create_agent(
         unit: Literal["bytes", "lines"] = "bytes",
         wait_ms: int = 0,
         wait_for_prompt: bool = False,
+        verbose_timing: bool = False,
     ) -> dict:
         """Read owned output in bytes (default) or LF-delimited lines; negative offsets read tail.
 
@@ -804,10 +805,12 @@ def create_agent(
         prompt_hint is heuristic; waiting_for_input=null means OS-level input wait is unknown.
         wait_for_prompt=true waits up to wait_ms for a recognized prompt with unread output,
         completion or EOF; a timeout can still return partial output. Prompts are preserved.
+        verbose_timing includes monotonic elapsed/first-output time and the last 200 pipe-read
+        events with byte ranges and explicit dropped-event counts; no duplicate output text.
         stdin/queue diagnostics show observed pipe state; status/exit_code show process completion.
         """
         return processes.read(
-            session_id, offset, length, unit, wait_ms, wait_for_prompt
+            session_id, offset, length, unit, wait_ms, wait_for_prompt, verbose_timing
         )
 
     @tool(read_only=False, destructive=True, open_world=True, oauth_scope=EXEC_SCOPE)

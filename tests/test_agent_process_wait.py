@@ -27,6 +27,84 @@ class ProcessWaitTests(unittest.TestCase):
         self.processes = Processes(Workspace(AgentPolicy(self.root, allow_exec=True)))
         self.addCleanup(self.processes.close)
 
+    def test_verbose_timing_real_process_and_stable_completion(self):
+        key = self.processes.start(
+            [
+                sys.executable,
+                "-u",
+                "-c",
+                "import sys; print('first',flush=True); sys.stdin.readline(); print('second',flush=True)",
+            ]
+        )["session_id"]
+        first = self.processes.read(key, offset=None, wait_ms=3000, verbose_timing=True)
+        self.assertIsNotNone(first["timing"]["first_output_ms"])
+        self.assertGreaterEqual(first["timing"]["first_output_ms"], 0)
+        self.processes.interact(key, "go\n")
+        session = self.processes.sessions[key]
+        with session.changed:
+            self.assertTrue(session.changed.wait_for(lambda: session.ended, timeout=5))
+        result = self.processes.read(key, verbose_timing=True)
+        timing = result["timing"]
+        self.assertTrue(timing["completed"])
+        self.assertGreaterEqual(timing["event_count"], 2)
+        self.assertEqual(timing["events"][0]["byte_start"], 0)
+        self.assertEqual(timing["events"][-1]["byte_end"], result["available_end"])
+        self.assertEqual(timing["first_output_ms"], first["timing"]["first_output_ms"])
+        self.assertEqual(
+            timing["elapsed_ms"],
+            self.processes.read(key, verbose_timing=True)["timing"]["elapsed_ms"],
+        )
+        self.assertNotIn("timing", self.processes.read(key))
+
+    def test_timing_silent_exit_and_bounded_event_history(self):
+        key = self.processes.start([sys.executable, "-c", "pass"])["session_id"]
+        session = self.processes.sessions[key]
+        with session.changed:
+            self.assertTrue(session.changed.wait_for(lambda: session.ended, timeout=5))
+        self.assertIsNone(
+            self.processes.read(key, verbose_timing=True)["timing"]["first_output_ms"]
+        )
+        process = Mock()
+        capacity = session.output_events.maxlen
+        process.stdout.read.side_effect = [b"x"] * (capacity + 3) + [b""]
+        fixture = Session(process, time.monotonic(), 1)
+        self.processes._read(fixture)
+        timing = fixture.timing()
+        self.assertEqual(timing["dropped_events"], 3)
+        self.assertEqual(len(timing["events"]), capacity)
+        self.assertEqual(timing["events"][0]["sequence"], 3)
+        self.assertEqual(timing["events"][-1]["byte_end"], capacity + 3)
+        self.assertTrue(all("output" not in e for e in timing["events"]))
+
+    def test_timing_timeout_and_explicit_stop_stay_fixed(self):
+        for stop in (False, True):
+            with self.subTest(explicit_stop=stop):
+                key = self.processes.start(
+                    [sys.executable, "-c", "import time; time.sleep(60)"],
+                    timeout_seconds=1 if not stop else 60,
+                )["session_id"]
+                session = self.processes.sessions[key]
+                if stop:
+                    self.processes.stop(key)
+                with session.changed:
+                    self.assertTrue(
+                        session.changed.wait_for(
+                            lambda session=session: session.ended, timeout=6
+                        )
+                    )
+                result = self.processes.read(key, verbose_timing=True)
+                self.assertEqual(result["timed_out"], not stop)
+                self.assertTrue(result["timing"]["completed"])
+                self.assertIsNone(result["timing"]["first_output_ms"])
+                self.assertGreaterEqual(result["timing"]["elapsed_ms"], 0)
+                with patch(
+                    "agentarm.processes.time.monotonic",
+                    return_value=session.created + 1000,
+                ):
+                    self.assertEqual(
+                        session.timing()["elapsed_ms"], result["timing"]["elapsed_ms"]
+                    )
+
     def test_notification_wait_new_cursor_timeout_and_stdin_close(self):
         script = "import sys; print('ready',flush=True); v=sys.stdin.readline(); print('reply:'+v.strip(),flush=True); sys.stdin.readline()"
         key = self.processes.start([sys.executable, "-u", "-c", script])["session_id"]
@@ -165,6 +243,7 @@ class ProcessWaitTests(unittest.TestCase):
                         "offset": None,
                         "wait_ms": 3000,
                         "wait_for_prompt": True,
+                        "verbose_timing": True,
                     },
                 )
                 self.assertFalse(result.is_error)
@@ -172,6 +251,11 @@ class ProcessWaitTests(unittest.TestCase):
                 self.assertEqual(value["wait_status"], "prompt_detected")
                 self.assertEqual(value["prompt_hint"], "python_primary")
                 self.assertTrue(value["output"].endswith(">>> "))
+                self.assertIsNotNone(value["timing"]["first_output_ms"])
+                self.assertFalse(value["timing"]["completed"])
+                self.assertEqual(
+                    value["timing"]["events"][-1]["byte_end"], value["available_end"]
+                )
             finally:
                 await agent.call_tool("force_terminate", {"session_id": key})
 

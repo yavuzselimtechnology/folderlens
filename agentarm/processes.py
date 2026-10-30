@@ -11,6 +11,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -42,6 +43,28 @@ class Session:
     stdin_write_in_progress: bool = False
     stdin_error: str | None = None
     read_cursor: int = 0
+    first_output_at: float | None = None
+    completed_at: float | None = None
+    output_events: deque = field(default_factory=lambda: deque(maxlen=200))
+    output_event_count: int = 0
+
+    def timing(self) -> dict:
+        now = time.monotonic()
+        return {
+            "elapsed_ms": (
+                (now if self.completed_at is None else self.completed_at) - self.created
+            )
+            * 1000,
+            "first_output_ms": None
+            if self.first_output_at is None
+            else (self.first_output_at - self.created) * 1000,
+            "completed": self.completed_at is not None,
+            "events": list(self.output_events),
+            "event_count": self.output_event_count,
+            "dropped_events": self.output_event_count - len(self.output_events),
+            "event_capacity": self.output_events.maxlen,
+            "clock": "monotonic; output events are observed pipe reads, not child write timestamps",
+        }
 
     def __post_init__(self):
         self.changed = threading.Condition(self.lock)
@@ -129,6 +152,7 @@ class Processes:
                     "-S",
                     str(Path(__file__).with_name("process_worker.py")),
                 ]
+            launched_at = time.monotonic()
             process = subprocess.Popen(
                 launch_command,
                 cwd=directory,
@@ -140,7 +164,7 @@ class Processes:
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
                 start_new_session=os.name != "nt",
             )
-            session = Session(process, time.monotonic(), timeout_seconds)
+            session = Session(process, launched_at, timeout_seconds)
             if os.name == "nt":
                 # A kill-on-close job also owns descendants left behind by a REPL.
                 import win32api
@@ -209,6 +233,19 @@ class Processes:
                 if not data:
                     break
                 with session.changed:
+                    observed = time.monotonic()
+                    if session.first_output_at is None:
+                        session.first_output_at = observed
+                    start_byte = session.dropped + len(session.output)
+                    session.output_events.append(
+                        {
+                            "sequence": session.output_event_count,
+                            "elapsed_ms": (observed - session.created) * 1000,
+                            "byte_start": start_byte,
+                            "byte_end": start_byte + len(data),
+                        }
+                    )
+                    session.output_event_count += 1
                     session.output.extend(data)
                     overflow = len(session.output) - self.max_output_bytes
                     if overflow > 0:
@@ -272,6 +309,8 @@ class Processes:
         self._terminate_descendants(session)
         session.readers_done.wait(timeout=2)
         with session.changed:
+            if session.completed_at is None:
+                session.completed_at = time.monotonic()
             session.ended = True
             session.changed.notify_all()
 
@@ -313,6 +352,7 @@ class Processes:
         unit: str = "bytes",
         wait_ms: int = 0,
         wait_for_prompt: bool = False,
+        verbose_timing: bool = False,
     ) -> dict:
         length = (16000 if unit == "bytes" else 1000) if length is None else length
         if (
@@ -323,6 +363,7 @@ class Processes:
             or type(wait_ms) is not int
             or not 0 <= wait_ms <= 30000
             or type(wait_for_prompt) is not bool
+            or type(verbose_timing) is not bool
             or (unit == "lines" and offset is None)
         ):
             raise ValueError(
@@ -450,6 +491,7 @@ class Processes:
                 "prompt_hint": prompt,
                 "prompt_hint_is_heuristic": True,
                 "waiting_for_input": None,
+                **({"timing": session.timing()} if verbose_timing else {}),
                 **window,
             }
 
@@ -484,6 +526,8 @@ class Processes:
         self._terminate(session)
         session.readers_done.wait(timeout=2)
         with session.changed:
+            if session.completed_at is None:
+                session.completed_at = time.monotonic()
             session.ended = True
             session.changed.notify_all()
         return self.read(session_id)

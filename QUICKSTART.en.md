@@ -49,3 +49,11 @@ downloaded separately; environments and private runtime state are excluded.
 `python run.py` opens the separate browser-sharing website. For the full agent,
 use `folderlens.py`. Existing /AgentArm/ URLs remain compatible; FolderLens is
 the product name and /folderlens/ is the preferred public entry.
+
+
+Process diagnostics: request `read_process_output` with `verbose_timing=true`
+for monotonic elapsed/first-output times and the last 200 observed pipe reads.
+Completion time includes process-tree/reader cleanup and stays fixed afterward.
+No output means a null first-output time. Events contain absolute byte ranges,
+sequence numbers and explicit dropped-event counts, without duplicate text.
+These are observed reads, not individual child write calls.

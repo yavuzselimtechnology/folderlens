@@ -723,3 +723,14 @@ sandbox başlangıcına alternatif sağlar; sandbox, çevrimdışı ağ ve JavaS
 yasağı korunur. Ayarı istemcinin MCP env bölümüne ekleyip ajanı yeniden başlatın.
 Varsayılan yönetilen Chromium ve Windows Edge yedeği değişmez. Keyfi yürütülebilir
 yol/bayrak kabul edilmez; normal tarayıcı profili kullanılmaz.
+
+
+### Süreç zamanlaması
+
+`read_process_output(..., verbose_timing=true)` monotonik saatle toplam gözlem
+süresini, ilk çıktı gecikmesini ve son 200 pipe okuma olayını döndürür.
+Tamamlanma süresi süreç ağacı/okuyucu temizliği sonundaki gözlemdir; tamamlandıktan
+sonra sabit kalır. Çıktı yoksa first_output_ms null olur. Her olay mutlak byte
+aralığı ve sırasını taşır; dropped_events eski olay kaybını bildirir. Olaylar
+çocuk programın write çağrılarıyla birebir değildir; OS pipe okumaları birleşebilir.
+Metin ikinci kez tutulmaz. Varsayılan yanıtta timing alanı yoktur.
