@@ -1,9 +1,11 @@
 import base64
 import io
+import os
 import random
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from agentarm.pdf_tools import _prepare_html, render_pdf_page, write_pdf
 from agentarm.workspace import AgentPolicy, Workspace
@@ -96,3 +98,11 @@ Görsel önizleme ve sayfa düzeni korunur.
         writer.close()
         with self.assertRaisesRegex(ValueError, "Page index"):
             render_pdf_page(readonly, "one.pdf", 9)
+
+    def test_owner_browser_channel_rejects_arbitrary_executable_names(self):
+        with (
+            patch.dict(os.environ, {"FOLDERLENS_PDF_BROWSER_CHANNEL": "../browser"}),
+            self.assertRaisesRegex(ValueError, "must be chrome or msedge"),
+        ):
+            write_pdf(self.workspace, "invalid.pdf", "No file should be written", None)
+        self.assertFalse((self.root / "invalid.pdf").exists())

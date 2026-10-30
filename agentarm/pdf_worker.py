@@ -167,9 +167,15 @@ def create_pdf(request: dict) -> dict:
     from pypdf import PdfReader
 
     runtime = Path(request["runtime_dir"])
+    channel = os.environ.get("FOLDERLENS_PDF_BROWSER_CHANNEL")
+    if channel not in {None, "chrome", "msedge"}:
+        raise ValueError("FOLDERLENS_PDF_BROWSER_CHANNEL must be chrome or msedge")
     with sync_playwright() as playwright:
-        channel = None
-        if not Path(playwright.chromium.executable_path).is_file() and os.name == "nt":
+        if (
+            channel is None
+            and not Path(playwright.chromium.executable_path).is_file()
+            and os.name == "nt"
+        ):
             channel = "msedge"
         try:
             context = playwright.chromium.launch_persistent_context(
@@ -184,7 +190,8 @@ def create_pdf(request: dict) -> dict:
             )
         except Error as exc:
             raise ValueError(
-                "PDF browser unavailable; run python -m playwright install chromium or install Edge"
+                "PDF browser failed to start with sandbox enabled; verify installation and OS sandbox policy, "
+                "or select installed Chrome/Edge with FOLDERLENS_PDF_BROWSER_CHANNEL=chrome/msedge"
             ) from exc
         try:
             context.route("**/*", lambda route: route.abort())

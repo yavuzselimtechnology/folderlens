@@ -9,6 +9,10 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      # Ubuntu restricts user namespaces for downloaded developer builds.
+      # Use the installed stable browser without disabling Chromium's sandbox.
+      FOLDERLENS_PDF_BROWSER_CHANNEL: chrome
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

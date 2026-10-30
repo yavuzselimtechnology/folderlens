@@ -714,3 +714,12 @@ ChatGPT'nin kendi hesabınızda araç seçimini yapabildiğini son bağlantıdan
 - [openpyxl: çalışma kitabı yükleme ve VBA koruma sınırları](https://openpyxl.readthedocs.io/en/stable/tutorial.html)
 - [Python: platformlara göre rename davranışı](https://docs.python.org/3/library/os.html#os.rename)
 - [Linux: renameat2 ve RENAME_NOREPLACE](https://man7.org/linux/man-pages/man2/rename.2.html)
+
+### Sahibin seçtiği PDF tarayıcısı
+
+FOLDERLENS_PDF_BROWSER_CHANNEL ortam ayarı yalnız chrome veya msedge kabul eder.
+Kurulu tarayıcıyı seçmek, Linux/AppArmor'da indirilen Chromium için engellenen
+sandbox başlangıcına alternatif sağlar; sandbox, çevrimdışı ağ ve JavaScript
+yasağı korunur. Ayarı istemcinin MCP env bölümüne ekleyip ajanı yeniden başlatın.
+Varsayılan yönetilen Chromium ve Windows Edge yedeği değişmez. Keyfi yürütülebilir
+yol/bayrak kabul edilmez; normal tarayıcı profili kullanılmaz.
