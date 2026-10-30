@@ -13,6 +13,7 @@ import zipfile
 from pathlib import Path
 
 PUBLIC_FILES = (
+    ".gitignore",
     "folderlens.py",
     "run.py",
     "start.ps1",
