@@ -20,6 +20,21 @@ jobs:
           cache: npm
       - run: python -m pip install -r requirements-dev.txt
       - run: python -m playwright install --with-deps chromium
+      - name: Verify sandboxed PDF renderer
+        run: |
+          python - <<'PY'
+          import tempfile
+          from agentarm.pdf_worker import create_pdf
+          with tempfile.TemporaryDirectory(prefix="folderlens-renderer-check-") as runtime:
+              result = create_pdf({
+                  "runtime_dir": runtime,
+                  "html": "<!doctype html><html><body><p>Renderer check</p></body></html>",
+                  "page_size": "A4",
+                  "landscape": False,
+              })
+              assert result["page_count"] == 1
+              assert not result["network_enabled"] and not result["javascript_enabled"]
+          PY
       - run: python -m unittest discover -s tests -p 'test_*.py'
       - run: python -m ruff check agentarm run.py folderlens.py build_agent_release.py tests
       - run: python -m ruff format --check agentarm run.py folderlens.py build_agent_release.py tests
