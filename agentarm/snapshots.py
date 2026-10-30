@@ -5,6 +5,7 @@ import hmac
 import html
 import io
 import json
+import math
 import re
 import secrets
 import time
@@ -210,6 +211,7 @@ class SnapshotStore:
         share_id: str | None = None,
         bridge_token: str | None = None,
         write_token_hash: str | None = None,
+        expected_snapshot: Snapshot | None = None,
     ) -> dict[str, Any]:
         self.cleanup()
         project_name = _clean_project_name(metadata.get("project_name"))
@@ -458,6 +460,11 @@ class SnapshotStore:
             write_token_hash=write_token_hash or _token_hash(raw_write_token or ""),
         )
         with self._lock:
+            if (
+                expected_snapshot is not None
+                and self._snapshot(share_id) is not expected_snapshot
+            ):
+                raise SnapshotError("Workspace changed during refresh; retry")
             previous = self._snapshots.get(share_id)
             projected = (
                 sum(item.memory_bytes for item in self._snapshots.values())
@@ -507,6 +514,7 @@ class SnapshotStore:
             share_id=share_id,
             bridge_token=bridge_token,
             write_token_hash=current.write_token_hash,
+            expected_snapshot=current,
         )
 
     def json_document(self, share_id: str, name: str) -> dict[str, Any]:
@@ -687,10 +695,7 @@ Long lines may continue across chunks.</p>
     def iter_project_json(self, share_id: str) -> Iterator[bytes]:
         snapshot = self._snapshot(share_id)
         encoder = json.JSONEncoder(ensure_ascii=False, separators=(",", ":"))
-        return (
-            chunk.encode("utf-8")
-            for chunk in encoder.iterencode(snapshot.project_document)
-        )
+        return _batched_utf8(encoder.iterencode(snapshot.project_document))
 
     def authorize_bridge(self, share_id: str, token: str) -> None:
         snapshot = self._snapshot(share_id)
@@ -1249,7 +1254,6 @@ def _document_index(document: dict[str, Any]) -> dict[str, Any]:
                 "chunk_url_template": document["chunk_url_template"],
             }
         )
-    if document.get("chunked"):
         return result
     if document["kind"] == "word":
         result["blocks"] = len(document["blocks"])
@@ -1422,6 +1426,13 @@ def _workbook_sheets(data: bytes) -> list[dict[str, Any]]:
     workbook = load_workbook(
         io.BytesIO(data), read_only=True, data_only=False, keep_links=False
     )
+    try:
+        return _read_worksheets(workbook)
+    finally:
+        workbook.close()
+
+
+def _read_worksheets(workbook: Any) -> list[dict[str, Any]]:
     sheets = []
     for worksheet in workbook.worksheets:
         rows = []
@@ -1456,7 +1467,6 @@ def _workbook_sheets(data: bytes) -> list[dict[str, Any]]:
                 "rows": rows,
             }
         )
-    workbook.close()
     return sheets
 
 
@@ -1561,21 +1571,15 @@ def _validated_git(value: Any, max_git_commits: int) -> dict[str, Any]:
             "source",
         ),
     )
-    history.sort(
-        key=lambda item: (
-            int(item.get("sequence", 0))
-            if isinstance(item.get("sequence"), (int, float))
-            else 0
-        )
-    )
+    history.sort(key=lambda item: _finite_int(item.get("sequence"), 0))
     raw_tracked_paths = value.get("tracked_paths", [])
     if not isinstance(raw_tracked_paths, list):
         raise SnapshotError("Invalid Git tracked paths")
     tracked_paths = sorted(
         {
-            safe_relative_path(str(path))
-            for path in raw_tracked_paths
-            if not is_sensitive_path(str(path)) and not is_ignored_path(str(path))
+            path
+            for path in map(_publishable_tracked_path, raw_tracked_paths)
+            if path is not None
         },
         key=_sort_key,
     )
@@ -1668,9 +1672,29 @@ def _validated_git_identity(value: Any) -> dict[str, Any] | None:
     return {
         "name": str(value.get("name") or "")[:500],
         "email": str(value.get("email") or "")[:500],
-        "timestamp": int(timestamp) if isinstance(timestamp, (int, float)) else None,
+        "timestamp": _finite_int(timestamp, None),
         "timezone": str(value.get("timezone") or "")[:10],
     }
+
+
+def _finite_int(value: Any, default: int | None) -> int | None:
+    """Integer value of a JSON number; NaN/Infinity are valid to Python's parser."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return default
+    if isinstance(value, (int, float)):
+        return int(value)
+    return default
+
+
+def _publishable_tracked_path(value: Any) -> str | None:
+    """Tracked names that cannot be represented safely are omitted, not fatal."""
+    text = str(value)
+    if is_sensitive_path(text) or is_ignored_path(text):
+        return None
+    try:
+        return safe_relative_path(text)
+    except ValueError:
+        return None
 
 
 def _git_records(value: Any, allowed: tuple[str, ...]) -> list[dict[str, Any]]:
@@ -1769,6 +1793,21 @@ def _read_upload(source: bytes | BinaryIO, maximum: int) -> bytes:
     if not isinstance(data, bytes):
         raise SnapshotError("Invalid uploaded document stream")
     return data
+
+
+def _batched_utf8(fragments: Iterator[str], size: int = 64 * 1024) -> Iterator[bytes]:
+    """Merge tiny JSON fragments so each streamed block carries useful payload."""
+    buffer: list[str] = []
+    length = 0
+    for fragment in fragments:
+        buffer.append(fragment)
+        length += len(fragment)
+        if length >= size:
+            yield "".join(buffer).encode("utf-8")
+            buffer.clear()
+            length = 0
+    if buffer:
+        yield "".join(buffer).encode("utf-8")
 
 
 def _token_hash(value: str) -> str:

@@ -30,7 +30,7 @@ function fixture(initial, hooks = {}) {
     ensureWritePermission = async () => {};
     getLocalFile = io.get; writeLocalFile = io.write; removeLocalFile = io.remove;
     refreshSnapshot = io.refresh; setChangeStatus = () => {};
-    globalThis.test = { applyLocalChanges, state };
+    globalThis.test = { applyLocalChanges, answerCommand, state, setPost(fn) { postJson = fn; } };
   })();`), context);
   return { files, ...context.test };
 }
@@ -76,5 +76,13 @@ const write = (path, before, content) => ({ op: "write", path, base_sha256: befo
   while (!release) await new Promise(resolve => setImmediate(resolve));
   release(); await running;
   assert.equal(f.state.busy, false);
+  // A refused late answer must not look like an expired share to the poll loop.
+  f = fixture({});
+  const refused = Object.assign(new Error("expired"), { status: 403 });
+  f.setPost(async () => { throw refused; });
+  await f.answerCommand({ share_id: "s", bridge_token: "t" }, { id: "1", operation: "unknown" });
+  const offline = Object.assign(new Error("down"), { status: 502 });
+  f.setPost(async () => { throw offline; });
+  await assert.rejects(f.answerCommand({ share_id: "s", bridge_token: "t" }, { id: "1", operation: "unknown" }), /down/);
   console.log("Local changes: success, stale hashes, concurrent edits, rollback, refresh failure and locking passed.");
 })().catch(error => { console.error(error); process.exitCode = 1; });

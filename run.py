@@ -73,6 +73,10 @@ def _dependency_error(exc: ModuleNotFoundError) -> None:
 
 
 def main() -> int:
+    if "--agent" in sys.argv:
+        from folderlens import main as agent_main
+
+        return agent_main([arg for arg in sys.argv[1:] if arg != "--agent"])
     if "--server" not in sys.argv:
         print("\nFolderLens temporary local workspace bridge")
         print(f"Opening : {PUBLIC_URL}")
@@ -93,16 +97,13 @@ def main() -> int:
         _bootstrap_and_restart(exc)
 
     settings = Settings.from_env()
+    host = os.getenv("AGENTARM_HOST", "127.0.0.1")
+    port = int(os.getenv("AGENTARM_PORT", "8765"))
     print("\nFolderLens local development server")
-    print("URL      : http://127.0.0.1:8765/")
+    print(f"URL      : http://{host}:{port}/")
     print("Storage  : process memory only")
     print("Press Ctrl+C to stop.\n")
-    uvicorn.run(
-        create_app(settings),
-        host=os.getenv("AGENTARM_HOST", "127.0.0.1"),
-        port=int(os.getenv("AGENTARM_PORT", "8765")),
-        proxy_headers=False,
-    )
+    uvicorn.run(create_app(settings), host=host, port=port, proxy_headers=False)
     return 0
 
 

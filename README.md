@@ -1,5 +1,69 @@
 # FolderLens
 
+## Build the downloadable agent source
+
+After committing reviewed source, run
+`python build_agent_release.py --commit HEAD --output-dir downloads`.
+The ZIP, SHA-256 sidecar and JSON manifest come only from an explicit public
+file allowlist at that exact Git commit. Working-tree edits, secrets, local
+profiles, environments, private connection/deploy records and existing archives
+are excluded. The package contains Python source and a generic quickstart;
+dependencies install separately. Generated `downloads/` stays outside Git.
+
+## Terminal agent for ChatGPT
+
+FolderLens now also has a separate **MCP agent** with 49 tools for files,
+paged search, Office/PDF documents, images, Git inspection, managed processes,
+conflict-checked edits, previews, undo and optional private persistent history. The browser
+sharing server below keeps its existing behavior and never gains terminal access.
+
+```powershell
+python folderlens.py --doctor
+python folderlens.py --root "C:\path\to\your\project" --allow-write --allow-exec --print-config toml
+```
+
+Add the printed configuration to a compatible MCP client, or enter its command
+and arguments in ChatGPT desktop **Settings → Plugins → MCPs → Add → STDIO**.
+The client launches the process; keep stdout reserved for the MCP protocol.
+Read-only is the default. `--allow-exec` grants the process your OS-user privileges;
+`--root` restricts filesystem tools but **does not sandbox commands**.
+Choose a project/data workspace outside the FolderLens installation: file tools
+keep the running application's import root and Python environments read-only.
+Runtime maintenance requires owner-authorized command execution.
+History defaults to metadata in memory. `--history metadata` persists metadata;
+`--history content` also retains bounded argument/result text, which can contain
+sensitive data. Both persistent modes use private, bounded local storage.
+Long tools can also run through `start_tool_call`, with a client `request_id`
+for deduplication, followed by `get_tool_result` and `list_remote_tool_calls`.
+Accepted work survives the initiating HTTP request; results/IDs remain bounded
+process memory and are lost on server restart. Never infer that a missing result
+means a write or command did not happen.
+For an explicit owner request to disconnect an HTTP device, `shutdown(device_id)`
+acknowledges the request before stopping its server. It requires execution
+authority and the matching device alias; restoring access requires a local restart.
+
+See [Agent setup and capability guide (Türkçe)](AGENT_GUIDE.md) for complete startup,
+HTTP authentication, capabilities, limits, verification and rollback instructions.
+For ChatGPT web, see the [detailed TR/EN setup](https://yavuzselimtech.tr/folderlens/agent/?lang=en#web): a private
+OpenAI Secure MCP Tunnel, or a reachable HTTPS endpoint with terminal-approved
+OAuth, scoped access and local client revocation.
+Agent dependencies install into the local `.venv`; production's `requirements.txt`
+does not include the MCP/terminal extensions. No OpenAI API key is needed for this
+MCP server; the connected client supplies the model. The optional OpenAI tunnel
+client requires its own restricted tunnel runtime credential.
+
+[Reference scope and limitations](https://yavuzselimtech.tr/folderlens/agent/?lang=en#limits)
+describe the comparison without claiming universal superiority or zero defects.
+
+## Browser workspace sharing
+
+The home page links to `/folderlens/agent/`, a Turkish/English guide explaining
+local STDIO, private web tunnels, authority and connection checks. It works
+without JavaScript and does not probe or control a visitor's local agent.
+The guide offers a source ZIP, SHA-256 and commit manifest. The agent itself
+works independently of this website. Publishing this page
+does not install an agent or grant access to a computer.
+
 FolderLens (formerly AgentArm) exposes a browser-selected project as ordered, fetchable HTML and JSON
 while keeping the workspace only in bounded process memory. The selected
 folder remains on its owner's device.
@@ -179,6 +243,10 @@ the same temporary AI view.
 - Real environment files, credentials, private keys, certificates, and Git
   internals are never included.
 - `.env.example` and `.env.sample` are allowed as templates.
+- Names the server's path policy cannot represent safely (`:`, `~`, trailing
+  space or dot, Windows reserved names such as `CON`, control characters, more
+  than 48 levels or 1,024 bytes) stay local, so one Word lock file such as
+  `~$report.docx` cannot make the whole import fail.
 - `.venv`, `node_modules`, `__pycache__`, `.pytest_cache`, `.ruff_cache`,
   `.tmp`, caches, logs, build output, and runtime state are excluded.
 - The server accepts at most 128 MiB per file, 384 MiB per workspace, 25,000

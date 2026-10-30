@@ -109,7 +109,32 @@ async function checkRepository(repository) {
   );
 }
 
+function indexEntry(name, extended) {
+  const fixed = Buffer.alloc(extended ? 64 : 62);
+  fixed.writeUInt16BE((extended ? 0x4000 : 0) | name.length, 60);
+  const body = Buffer.concat([fixed, Buffer.from(name, "utf8")]);
+  return Buffer.concat([body, Buffer.alloc(8 - (body.length % 8) || 8)]);
+}
+
+function checkIndexParser() {
+  const header = Buffer.alloc(12);
+  header.write("DIRC", 0, "ascii");
+  header.writeUInt32BE(3, 4);
+  header.writeUInt32BE(3, 8);
+  const index = Buffer.concat([
+    header, indexEntry("a.txt", false), indexEntry("sparse/b.txt", true),
+    indexEntry("c.txt", false),
+  ]);
+  const paths = AgentArmGit._test.parseGitIndex(
+    index.buffer.slice(index.byteOffset, index.byteOffset + index.length)
+  );
+  if (paths.join("|") !== "a.txt|sparse/b.txt|c.txt") {
+    throw new Error(`Git index v3 extended entry misparsed: ${paths.join("|")}`);
+  }
+}
+
 async function main() {
+  checkIndexParser();
   const repository = fs.mkdtempSync(path.join(os.tmpdir(), "folderlens-git-test-"));
   const git = (...args) => execFileSync("git", args, { cwd: repository, stdio: "pipe" });
   try {

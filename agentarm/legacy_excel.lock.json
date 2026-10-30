@@ -1,0 +1,75 @@
+{
+  "schema": 1,
+  "java": {
+    "version": "21.0.13.0.3",
+    "url": "https://cdn.azul.com/zulu/bin/zulu21.54.109-ca-jre21.0.13.0.3-win_x64.zip",
+    "sha256": "3a01d4e2eaab87bee5fdccae051fc3dc2c4dd655c04b942aa8ff7a74aab314c4",
+    "size": 49364248
+  },
+  "jars": [
+    {
+      "name": "poi-6.0.0.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/apache/poi/poi/6.0.0/poi-6.0.0.jar",
+      "sha512": "737603fee553791062c562af90caa20b2fe1542cc8de6adafccdaccf6087db30454d85b8b70e99fd0e970805fb65c305de2a313b18abf841ec21378c1557fcb2",
+      "size": 3102357,
+      "compiler": false,
+      "integrity_source": "publisher-sha512"
+    },
+    {
+      "name": "commons-codec-1.23.0.jar",
+      "url": "https://repo.maven.apache.org/maven2/commons-codec/commons-codec/1.23.0/commons-codec-1.23.0.jar",
+      "sha512": "fdbda49825afd3eef86987155865f74f71b51f88c9145df12a473b209f52a70d4e84a5f3c19648f42c9b8a5989bcdf4a0976df0a42b85fa3dbb5b52841a350ff",
+      "size": 440773,
+      "compiler": false,
+      "integrity_source": "TLS artifact and publisher SHA-1, locked as SHA-512"
+    },
+    {
+      "name": "commons-collections4-4.6.0.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/apache/commons/commons-collections4/4.6.0/commons-collections4-4.6.0.jar",
+      "sha512": "76fc3fe1e6926d25f73493595bca77441cf725843c394ed0783c117c4cb9d6d843ca48c60ca1298fcc70c3f0561ea8c2a190749b75ed6b56b286c33f7b2e68a2",
+      "size": 934384,
+      "compiler": false,
+      "integrity_source": "TLS artifact and publisher SHA-1, locked as SHA-512"
+    },
+    {
+      "name": "commons-math3-3.6.1.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/apache/commons/commons-math3/3.6.1/commons-math3-3.6.1.jar",
+      "sha512": "8bc2438b3b4d9a6be4a47a58410b2d4d0e56e05787ab24badab8cbc9075d61857e8d2f0bffedad33f18f8a356541d00f80a8597b5dedb995be8480d693d03226",
+      "size": 2213560,
+      "compiler": false,
+      "integrity_source": "TLS artifact and publisher SHA-1, locked as SHA-512"
+    },
+    {
+      "name": "commons-io-2.22.0.jar",
+      "url": "https://repo.maven.apache.org/maven2/commons-io/commons-io/2.22.0/commons-io-2.22.0.jar",
+      "sha512": "fca0b4ae70e531bee74413e0b865981aa8b60a9390f789b63997203dae67be65362e95a0c35b9d4b072fbb0810114783415dd22b92fb42e5594b10992f632bc5",
+      "size": 609182,
+      "compiler": false,
+      "integrity_source": "TLS artifact and publisher SHA-1, locked as SHA-512"
+    },
+    {
+      "name": "SparseBitSet-1.3.jar",
+      "url": "https://repo.maven.apache.org/maven2/com/zaxxer/SparseBitSet/1.3/SparseBitSet-1.3.jar",
+      "sha512": "c5609f2fdd72ab2e7461a03c85004a47941b883926f84665302bfff35aba5fa48d4ce47ac24314a3bc2dd7c70e1f8d824567e5026fd17485b06c44999942af5f",
+      "size": 25843,
+      "compiler": false,
+      "integrity_source": "TLS artifact and publisher SHA-1, locked as SHA-512"
+    },
+    {
+      "name": "log4j-api-2.26.1.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/apache/logging/log4j/log4j-api/2.26.1/log4j-api-2.26.1.jar",
+      "sha512": "f29f7697ee8d8d824e5dad33abbd9d1bdea49e69c39484362a40779e8d120800ef37b3702c49589ad1fc5639b704faef2bfb592001b413e8a09e6d5947ebae1e",
+      "size": 351428,
+      "compiler": false,
+      "integrity_source": "TLS artifact and publisher SHA-1, locked as SHA-512"
+    },
+    {
+      "name": "ecj-3.46.100.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/eclipse/jdt/ecj/3.46.100/ecj-3.46.100.jar",
+      "sha512": "080bb403adb3b88b5b5f382388922425de5274f7729f0a94702f0e2a516c7d13c6740faab1cb20786b1dda0c5da933aa9b842f7c64867414ff75fa668ea06b09",
+      "size": 3384534,
+      "compiler": true,
+      "integrity_source": "TLS artifact and publisher SHA-1, locked as SHA-512"
+    }
+  ]
+}

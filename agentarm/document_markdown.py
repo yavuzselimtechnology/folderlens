@@ -368,7 +368,10 @@ def _safe_archive_member_name(value: str) -> str:
 
 def _joined_archive_member(opf_path: str, href: str) -> str:
     parent = posixpath.dirname(opf_path)
-    return _safe_archive_member_name(posixpath.join(parent, href))
+    target = urldefrag(href)[0].replace("\\", "/")
+    # Manifest hrefs may climb out of the OPF folder ("../Text/a.xhtml"). Resolve
+    # them first; the safety check still rejects anything leaving the archive.
+    return _safe_archive_member_name(posixpath.normpath(posixpath.join(parent, target)))
 
 
 def _local_name(tag: Any) -> str:

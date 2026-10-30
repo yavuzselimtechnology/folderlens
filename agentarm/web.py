@@ -5,11 +5,13 @@ import json
 import time
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
+from html import escape
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import (
     FileResponse,
     HTMLResponse,
@@ -35,6 +37,8 @@ ROOT = Path(__file__).resolve().parents[1]
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     store = SnapshotStore(settings)
+    # Keep one memory-intensive extraction in flight while HTTP stays responsive.
+    extraction_lock = asyncio.Lock()
     relay = EphemeralRelay(
         request_timeout=settings.bridge_request_timeout,
         idle_ttl=settings.bridge_idle_seconds,
@@ -61,9 +65,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         openapi_url=None,
         lifespan=lifespan,
     )
-    app.state.settings = settings
-    app.state.store = store
-    app.state.relay = relay
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
@@ -97,8 +98,43 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/AgentArm", include_in_schema=False)
     @app.get("/AgentArm/", include_in_schema=False)
+    @app.get("/folderlens", include_in_schema=False)
+    @app.get("/folderlens/", include_in_schema=False)
     async def index() -> FileResponse:
         return FileResponse(ROOT / "index.html")
+
+    @app.get("/AgentArm/agent", include_in_schema=False)
+    @app.get("/AgentArm/agent/", include_in_schema=False)
+    @app.get("/folderlens/agent", include_in_schema=False)
+    @app.get("/folderlens/agent/", include_in_schema=False)
+    async def agent_setup(lang: Literal["tr", "en"] = "tr") -> HTMLResponse:
+        page = ROOT / ("agent.en.html" if lang == "en" else "agent.html")
+        requirements = "\n\n".join(
+            name + "\n" + (ROOT / name).read_text(encoding="utf-8").strip()
+            for name in ("requirements.txt", "requirements-agent.txt")
+        )
+        return HTMLResponse(
+            page.read_text(encoding="utf-8").replace(
+                "<!--agent-dependencies-->", escape(requirements)
+            )
+        )
+
+    @app.get("/AgentArm/downloads/{filename}", include_in_schema=False)
+    @app.get("/folderlens/downloads/{filename}", include_in_schema=False)
+    @app.head("/AgentArm/downloads/{filename}", include_in_schema=False)
+    @app.head("/folderlens/downloads/{filename}", include_in_schema=False)
+    async def agent_download(filename: str) -> FileResponse:
+        types = {
+            "folderlens-agent.zip": "application/zip",
+            "folderlens-agent.zip.sha256": "text/plain",
+            "folderlens-agent.json": "application/json",
+        }
+        if filename not in types:
+            raise HTTPException(404, "Unknown download")
+        path = ROOT / "downloads" / filename
+        if not path.is_file() or path.is_symlink():
+            raise HTTPException(503, "Download is not available for this release")
+        return FileResponse(path, media_type=types[filename], filename=filename)
 
     @app.get("/", include_in_schema=False)
     async def local_root() -> RedirectResponse:
@@ -123,9 +159,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         _check_rate_limit(request, upload_windows, settings.uploads_per_hour)
         form, parsed, uploads = await _read_snapshot_form(request, settings)
         try:
-            result = store.publish(
-                parsed, [(path, upload.file) for path, upload in uploads]
-            )
+            async with extraction_lock:
+                result = await run_in_threadpool(
+                    store.publish,
+                    parsed,
+                    [(path, upload.file) for path, upload in uploads],
+                )
         except (SnapshotError, ValueError) as exc:
             raise HTTPException(422, str(exc)) from exc
         finally:
@@ -141,12 +180,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         bridge_token = request.headers.get("x-agentarm-bridge", "")
         form, parsed, uploads = await _read_snapshot_form(request, settings)
         try:
-            result = store.refresh(
-                share_id,
-                bridge_token,
-                parsed,
-                [(path, upload.file) for path, upload in uploads],
-            )
+            async with extraction_lock:
+                result = await run_in_threadpool(
+                    store.refresh,
+                    share_id,
+                    bridge_token,
+                    parsed,
+                    [(path, upload.file) for path, upload in uploads],
+                )
         except (FileNotFoundError, SnapshotError, ValueError) as exc:
             raise HTTPException(403, str(exc)) from exc
         finally:

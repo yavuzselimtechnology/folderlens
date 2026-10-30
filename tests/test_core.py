@@ -396,6 +396,46 @@ class SnapshotTests(unittest.TestCase):
         with self.assertRaises(SnapshotError):
             self.store.authorize_write(result["share_id"], "wrong")
 
+    def test_refresh_cannot_restore_a_disconnected_or_replaced_workspace(self) -> None:
+        class InterleavedRead(io.BytesIO):
+            def __init__(self, store, created, action):
+                super().__init__(b"stale")
+                self.store, self.created, self.action = store, created, action
+
+            def read(self, size: int = -1) -> bytes:
+                share_id, token = self.created["share_id"], self.created["bridge_token"]
+                if self.action == "disconnect":
+                    self.store.forget(share_id, token)
+                else:
+                    self.store.refresh(
+                        share_id,
+                        token,
+                        {"project_name": "newest"},
+                        [("a.txt", b"newest")],
+                    )
+                return super().read(size)
+
+        for action in ("disconnect", "replace"):
+            with self.subTest(action=action):
+                created, _, _ = self.publish([("a.txt", b"original")])
+                with self.assertRaises((FileNotFoundError, SnapshotError)):
+                    self.store.refresh(
+                        created["share_id"],
+                        created["bridge_token"],
+                        {"project_name": "stale"},
+                        [("a.txt", InterleavedRead(self.store, created, action))],
+                    )
+                if action == "disconnect":
+                    with self.assertRaises(FileNotFoundError):
+                        self.store.document(created["share_id"], 1)
+                else:
+                    self.assertEqual(
+                        self.store.document(created["share_id"], 1)["document"][
+                            "content"
+                        ],
+                        "newest",
+                    )
+
     def test_refresh_keeps_identity_and_write_capability(self) -> None:
         result, _, _ = self.publish([("README.md", b"first\n")])
         refreshed = self.store.refresh(
@@ -610,6 +650,79 @@ class SnapshotTests(unittest.TestCase):
         document = project["documents"][0]
         self.assertEqual(document["kind"], "extraction_error")
         self.assertIn("unsafe member reference", document["error"])
+
+    def test_epub_manifest_may_reference_parent_of_the_opf_folder(self) -> None:
+        epub = io.BytesIO()
+        with zipfile.ZipFile(epub, "w", zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(
+                "META-INF/container.xml",
+                '<container><rootfiles><rootfile full-path="OEBPS/content.opf"/>'
+                "</rootfiles></container>",
+            )
+            archive.writestr(
+                "OEBPS/content.opf",
+                "<package><manifest>"
+                '<item id="a" href="../Text/a%20b.xhtml"/>'
+                '<item id="bad" href="../../outside.xhtml"/>'
+                "</manifest></package>",
+            )
+            archive.writestr(
+                "Text/a b.xhtml", "<html><body><h1>Parent</h1></body></html>"
+            )
+        _, _, project = self.publish([("docs/parent.epub", epub.getvalue())])
+        document = project["documents"][0]
+        self.assertEqual(document["kind"], "extraction_error")
+        self.assertIn("unsafe member reference", document["error"])
+
+        epub = io.BytesIO()
+        with zipfile.ZipFile(epub, "w", zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(
+                "META-INF/container.xml",
+                '<container><rootfiles><rootfile full-path="OEBPS/content.opf"/>'
+                "</rootfiles></container>",
+            )
+            archive.writestr(
+                "OEBPS/content.opf",
+                "<package><manifest>"
+                '<item id="a" href="../Text/a%20b.xhtml"/></manifest>'
+                '<spine><itemref idref="a"/></spine></package>',
+            )
+            archive.writestr(
+                "Text/a b.xhtml", "<html><body><h1>Parent</h1></body></html>"
+            )
+        _, _, project = self.publish([("docs/parent.epub", epub.getvalue())])
+        document = project["documents"][0]
+        self.assertEqual(document["kind"], "epub")
+        self.assertIn("# Parent", document["markdown"])
+
+    def test_git_manifest_tolerates_unrepresentable_names_and_non_finite_numbers(
+        self,
+    ) -> None:
+        result = self.store.publish(
+            {
+                "project_name": "Git edge cases",
+                "git": {
+                    "detected": True,
+                    "tracked_paths": ["ok.py", "~$lock.docx", "a:b.txt", ".env"],
+                    "history": [
+                        {"sequence": float("inf"), "message": "inf"},
+                        {"sequence": 1, "message": "one"},
+                    ],
+                    "commits": [
+                        {
+                            "sha": "a" * 40,
+                            "author": {"name": "A", "timestamp": float("nan")},
+                        }
+                    ],
+                },
+            },
+            [("ok.py", b"print(1)\n")],
+        )
+        git = self.store.json_document(result["share_id"], "git.json")["repository"]
+        self.assertEqual(git["tracked_paths"], ["ok.py"])
+        self.assertEqual(len(git["history"]), 2)
+        commit = self.store.git_commit_page(result["share_id"], 1)["commits"][0]
+        self.assertIsNone(commit["author"]["timestamp"])
 
     def test_protected_generated_and_unsupported_paths_fail_closed(self) -> None:
         for path in (

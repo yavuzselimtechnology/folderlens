@@ -639,7 +639,8 @@
       const entryStart = offset;
       const flags = view.getUint16(offset + 60);
       const declaredLength = flags & 0x0fff;
-      offset += 62;
+      // Version 3 entries flagged "extended" carry two more flag bytes.
+      offset += version >= 3 && (flags & 0x4000) ? 64 : 62;
       let end = offset;
       const maximum = Math.min(bytes.length, offset + 4096);
       if (declaredLength < 0x0fff) end = Math.min(offset + declaredLength, maximum);

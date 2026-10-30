@@ -51,6 +51,13 @@ const dir = (name, entries, failure) => ({name,kind:"directory",async *values() 
   assert.equal(result.files[0].file,files[0],"must retain original File, not a text conversion/copy");
   assert.equal(result.excluded.protected_files,1);
   assert.equal(result.excluded.ignored_directories,1);
+  // Names the server's path policy rejects must stay local instead of failing the whole upload.
+  const odd = ["ok.md", "~$lock.docx", "a:b.md", "CON.txt", "~tmp/inner.md", "trail./x.md"]
+    .map(name => { const f = new File(["x"], name.split("/").pop()); Object.defineProperty(f, "webkitRelativePath", {value: "project/" + name}); return f; });
+  result = await h.collectProject(h.folderFromFiles(odd));
+  assert.deepEqual(Array.from(result.files, item => item.path), ["ok.md"]);
+  assert.equal(result.excluded.unsupported_files, 3);
+  assert.equal(result.excluded.ignored_directories, 2);
   h.state.directory=root;
   await assert.rejects(h.ensureWritePermission(true),/read-only/);
   h.setHooks({git:async()=>{throw new DOMException("Missing Git ref","NotFoundError");}});

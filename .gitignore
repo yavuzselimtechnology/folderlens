@@ -15,3 +15,6 @@ node_modules/
 *.log
 playwright-report/
 test-results/
+.folderlens/
+graphify-out/
+downloads/

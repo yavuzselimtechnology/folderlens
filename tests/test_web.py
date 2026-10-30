@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 import json
+import tempfile
 import unittest
+import zipfile
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from unittest.mock import patch
 
+from bs4 import BeautifulSoup
 from fastapi.testclient import TestClient
 
 from agentarm.config import Settings
@@ -70,10 +75,25 @@ class WebIntegrationTests(unittest.TestCase):
             },
         )
 
-    def test_root_is_passwordless_minimal_english_picker(self) -> None:
+    def test_root_keeps_passwordless_picker_and_agent_download_entry(self) -> None:
         response = self.client.get("/AgentArm/")
         self.assertEqual(response.status_code, 200)
         self.assertIn("Choose Folder", response.text)
+        self.assertIn('href="/folderlens/agent/"', response.text)
+        self.assertIn("Download FolderLens Agent", response.text)
+        setup = self.client.get("/AgentArm/agent/")
+        self.assertEqual(setup.status_code, 200)
+        self.assertIn('<html lang="tr">', setup.text)
+        self.assertIn("get_config", setup.text)
+        self.assertEqual(setup.headers["x-frame-options"], "DENY")
+        self.assertEqual(setup.headers["cache-control"], "no-store")
+        self.assertEqual(self.client.get("/AgentArm/agent").content, setup.content)
+        self.assertEqual(
+            self.client.get(
+                "/AgentArm/agent/.folderlens/tunnel/runtime.key"
+            ).status_code,
+            404,
+        )
         self.assertIn('id="folderStage"', response.text)
         self.assertIn('id="idlePet"', response.text)
         self.assertIn('class="idle-pet" aria-hidden="true"', response.text)
@@ -87,7 +107,7 @@ class WebIntegrationTests(unittest.TestCase):
         self.assertNotIn("idle-pet-smile", response.text)
         self.assertIn('focusable="false"', response.text)
         lowered = response.text.casefold()
-        for obsolete in ("password", "parola", "login", "oauth", "mcp", "runner"):
+        for obsolete in ("password", "parola", "login", "oauth", "runner"):
             self.assertNotIn(obsolete, lowered)
         self.assertEqual(response.headers["x-frame-options"], "DENY")
         self.assertEqual(response.headers["cache-control"], "no-store")
@@ -98,6 +118,74 @@ class WebIntegrationTests(unittest.TestCase):
         policy = self.client.get("/AgentArm/api/policy").json()
         self.assertEqual(policy["max_files"], self.settings.max_files)
         self.assertEqual(policy["max_git_commits"], self.settings.max_git_commits)
+
+    def test_agent_guide_languages_versions_and_friendly_aliases(self) -> None:
+        pages = {}
+        for lang in ("tr", "en"):
+            response = self.client.get("/folderlens/agent/", params={"lang": lang})
+            self.assertEqual(response.status_code, 200)
+            soup = BeautifulSoup(response.text, "html.parser")
+            self.assertEqual(soup.html["lang"], lang)
+            self.assertEqual(
+                soup.select_one('[aria-current="page"]').text, lang.upper()
+            )
+            self.assertEqual(len(soup.select("h1")), 1)
+            anchors = {a["href"][1:] for a in soup.select('a[href^="#"]')}
+            sections = {s["id"] for s in soup.select("section[id]")}
+            self.assertEqual(anchors, sections)
+            self.assertEqual(len(sections), 10)
+            self.assertNotIn("<!--agent-dependencies-->", response.text)
+            self.assertIn("mcp==2.3.0", response.text)
+            self.assertEqual(
+                response.content,
+                self.client.get("/AgentArm/agent/", params={"lang": lang}).content,
+            )
+            pages[lang] = [p.text for p in soup.select("pre code")]
+        self.assertEqual(pages["tr"], pages["en"])
+        self.assertEqual(
+            self.client.get("/folderlens/agent/?lang=other").status_code, 422
+        )
+        self.assertEqual(
+            self.client.get("/folderlens/").content,
+            self.client.get("/AgentArm/").content,
+        )
+
+    def test_download_allowlist_missing_package_headers_and_range(self) -> None:
+        with (
+            tempfile.TemporaryDirectory() as temporary,
+            patch("agentarm.web.ROOT", Path(temporary)),
+        ):
+            root = Path(temporary)
+            self.assertEqual(
+                self.client.get(
+                    "/folderlens/downloads/folderlens-agent.zip"
+                ).status_code,
+                503,
+            )
+            (root / "downloads").mkdir()
+            path = root / "downloads/folderlens-agent.zip"
+            with zipfile.ZipFile(path, "w") as archive:
+                archive.writestr("FolderLens/README.md", "download fixture")
+            response = self.client.get("/folderlens/downloads/folderlens-agent.zip")
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.content, path.read_bytes())
+            self.assertEqual(response.headers["content-type"], "application/zip")
+            self.assertIn("attachment;", response.headers["content-disposition"])
+            self.assertEqual(response.headers["cache-control"], "no-store")
+            self.assertEqual(
+                self.client.head("/folderlens/downloads/folderlens-agent.zip").content,
+                b"",
+            )
+            partial = self.client.get(
+                "/AgentArm/downloads/folderlens-agent.zip",
+                headers={"Range": "bytes=0-3"},
+            )
+            self.assertEqual(partial.status_code, 206)
+            self.assertEqual(partial.content, path.read_bytes()[:4])
+            for name in ("runtime.key", "other.zip", "../runtime.key"):
+                self.assertEqual(
+                    self.client.get("/folderlens/downloads/" + name).status_code, 404
+                )
 
     def test_idle_pet_assets_are_event_driven_and_motion_safe(self) -> None:
         script = self.client.get("/AgentArm/assets/app.js")

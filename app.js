@@ -591,15 +591,21 @@
     } catch (caught) {
       error = caught.message || String(caught);
     }
-    await postJson(
-      `/AgentArm/api/snapshots/${snapshot.share_id}/bridge/respond`,
-      {
-        bridge_token: snapshot.bridge_token,
-        request_id: command.id,
-        result,
-        error,
-      }
-    );
+    try {
+      await postJson(
+        `/AgentArm/api/snapshots/${snapshot.share_id}/bridge/respond`,
+        {
+          bridge_token: snapshot.bridge_token,
+          request_id: command.id,
+          result,
+          error,
+        }
+      );
+    } catch (respondError) {
+      // A late answer (the AI request already timed out) is refused with 403.
+      // That is not an expired share; the next poll decides whether it is.
+      if (respondError.status !== 403) throw respondError;
+    }
   }
 
   async function applyPastedChanges() {
@@ -845,18 +851,24 @@
     return current;
   }
 
+  // Mirrors the server's safe_relative_path: a single name it rejects would
+  // otherwise make the whole upload fail, so such paths stay local instead.
+  function isRepresentablePath(path) {
+    const parts = path.split("/");
+    return Boolean(path) && !path.startsWith("/") && !path.includes("\\") &&
+      !path.includes(":") && parts.length <= 48 &&
+      new TextEncoder().encode(path).length <= 1024 &&
+      !parts.some((part) => {
+        const stem = part.replace(/[ .]+$/u, "").split(".", 1)[0].toUpperCase();
+        return !part || part === "." || part === ".." ||
+          part !== part.replace(/[ .]+$/u, "") || part.includes("~") ||
+          windowsReserved.has(stem) || /[\u0000-\u001f]/u.test(part);
+      });
+  }
+
   function safeLocalPath(value) {
     const path = String(value || "");
-    const parts = path.split("/");
-    if (!path || path.startsWith("/") || path.includes("\\") ||
-        path.includes(":") || parts.length > 48 ||
-        new TextEncoder().encode(path).length > 1024 ||
-        parts.some((part) => {
-          const stem = part.replace(/[ .]+$/u, "").split(".", 1)[0].toUpperCase();
-          return !part || part === "." || part === ".." ||
-            part !== part.replace(/[ .]+$/u, "") || part.includes("~") ||
-            windowsReserved.has(stem) || /[\u0000-\u001f]/u.test(part);
-        })) {
+    if (!isRepresentablePath(path)) {
       throw new Error(`Unsafe local path: ${path}`);
     }
     if (isSensitive(path) || isIgnoredPath(path) || !isTextSupported(path)) {
@@ -984,7 +996,7 @@
       for (const entry of entries) {
         const path = `${prefix}${entry.name}`;
         if (entry.kind === "directory") {
-          if (isIgnoredDirectory(entry.name)) {
+          if (isIgnoredDirectory(entry.name) || !isRepresentablePath(path)) {
             exclude("ignored_directories", path);
             continue;
           }
@@ -996,7 +1008,7 @@
           exclude("protected_files", path);
           continue;
         }
-        if (!isSupported(path)) {
+        if (!isSupported(path) || !isRepresentablePath(path)) {
           exclude("unsupported_files", path);
           continue;
         }
@@ -1184,7 +1196,8 @@
       const entryStart = offset;
       const flags = view.getUint16(offset + 60);
       const declaredLength = flags & 0x0fff;
-      offset += 62;
+      // Version 3 entries flagged "extended" carry two more flag bytes.
+      offset += version >= 3 && (flags & 0x4000) ? 64 : 62;
       let end = offset;
       const maximum = Math.min(bytes.length, offset + 4096);
       if (declaredLength < 0x0fff) end = Math.min(offset + declaredLength, maximum);
