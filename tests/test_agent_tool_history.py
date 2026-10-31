@@ -7,10 +7,12 @@ import tempfile
 import time
 import unittest
 from contextlib import redirect_stdout
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import CallToolResult, ImageContent, TextContent
 
 from agentarm.mcp_server import create_agent
@@ -21,6 +23,7 @@ from agentarm.tool_history import (
     RETENTION_SECONDS,
     ToolHistory,
     capture,
+    parse_since,
 )
 from agentarm.workspace import AgentPolicy
 from folderlens import client_config, main, parser
@@ -34,11 +37,18 @@ class HistoryTests(unittest.TestCase):
         self.store = ToolHistory(self.directory, "content")
         self.addCleanup(self.store.close)
 
-    def append(self, index=0, scopes=None, timestamp=None):
+    def append(
+        self,
+        index=0,
+        scopes=None,
+        timestamp=None,
+        tool="read_file",
+        success=True,
+    ):
         self.store.append(
             {
-                "tool": "read_file",
-                "success": True,
+                "tool": tool,
+                "success": success,
                 "duration_ms": 1,
                 "time": time.time() if timestamp is None else timestamp,
             },
@@ -46,6 +56,52 @@ class HistoryTests(unittest.TestCase):
             {"index": index},
             {"value": index},
         )
+
+    def test_since_tool_success_filters_compose_with_pagination(self):
+        baseline = time.time() - 10
+        self.append(1, timestamp=baseline, tool="write_file", success=True)
+        self.append(2, timestamp=baseline + 1, tool="read_file", success=False)
+        self.append(3, timestamp=baseline + 2, tool="read_file", success=True)
+        self.append(4, timestamp=baseline + 3, tool="read_file", success=False)
+        latest = self.store.recent(
+            1,
+            {READ_SCOPE},
+            64000,
+            since=baseline + 0.5,
+            tool_name="read_file",
+            success=False,
+        )
+        self.assertEqual(
+            json.loads(latest["calls"][0]["result"]["json_prefix"])["value"], 4
+        )
+        self.assertTrue(latest["has_more"])
+        older = self.store.recent(
+            20,
+            {READ_SCOPE},
+            64000,
+            before_id=latest["next_before_id"],
+            since=baseline + 0.5,
+            tool_name="read_file",
+            success=False,
+        )
+        self.assertEqual(
+            json.loads(older["calls"][0]["result"]["json_prefix"])["value"], 2
+        )
+        self.assertFalse(older["has_more"])
+
+    def test_history_filter_validation_rejects_ambiguous_values(self):
+        self.assertEqual(parse_since("2026-11-01T12:30:00Z"), 1793536200.0)
+        self.assertEqual(parse_since("2026-11-01T15:30:00+03:00"), 1793536200.0)
+        for value in ("2026-11-01T12:30:00", "not-a-date", ""):
+            with (
+                self.subTest(value=value),
+                self.assertRaisesRegex(ValueError, "timezone-aware"),
+            ):
+                parse_since(value)
+        with self.assertRaisesRegex(ValueError, "tool_name"):
+            self.store.recent(20, {READ_SCOPE}, 64000, tool_name="")
+        with self.assertRaisesRegex(ValueError, "success"):
+            self.store.recent(20, {READ_SCOPE}, 64000, success=1)
 
     def test_restart_recovers_content_in_order_and_supports_older_pages(self):
         for index in range(5):
@@ -300,6 +356,57 @@ class HistoryMCPTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("do not retain content", str(response))
         self.assertNotIn("arguments", str(response))
         self.assertFalse((self.root / ".folderlens").exists())
+
+    async def test_mcp_filters_persistent_and_memory_history(self):
+        tools = {item.name: item for item in await self.server.list_tools()}
+        properties = tools["get_recent_tool_calls"].input_schema["properties"]
+        self.assertEqual(
+            {"limit", "before_id", "since", "tool_name", "success"},
+            set(properties),
+        )
+        self.assertIn({"type": "boolean"}, properties["success"]["anyOf"])
+        before = datetime.now(timezone.utc).isoformat()
+        with self.assertRaises(ToolError):
+            await self.server.call_tool("read_file", {"path": "missing.txt"})
+        await self.call(
+            "write_file",
+            {
+                "path": "file.txt",
+                "content": "history filters",
+                "base_sha256": None,
+                "preview": False,
+            },
+        )
+        await self.call("read_file", {"path": "file.txt"})
+        failures = await self.call(
+            "get_recent_tool_calls",
+            {"since": before, "tool_name": "read_file", "success": False},
+        )
+        self.assertEqual([row["success"] for row in failures["calls"]], [False])
+        reads = await self.call(
+            "get_recent_tool_calls",
+            {"since": before, "tool_name": "read_file", "success": True},
+        )
+        self.assertEqual([row["tool"] for row in reads["calls"]], ["read_file"])
+
+        memory = create_agent(AgentPolicy(self.root))
+        with self.assertRaises(ToolError):
+            await memory.call_tool("read_file", {"path": "missing-memory.txt"})
+        page = await memory.call_tool(
+            "get_recent_tool_calls",
+            {"since": before, "tool_name": "read_file", "success": False},
+        )
+        value = page.structured_content or json.loads(page.content[0].text)
+        self.assertEqual([row["success"] for row in value["calls"]], [False])
+
+    async def test_mcp_rejects_naive_since_and_non_boolean_success(self):
+        for arguments in (
+            {"since": "2026-11-01T12:30:00"},
+            {"tool_name": ""},
+            {"success": 1},
+        ):
+            with self.subTest(arguments=arguments), self.assertRaises(ToolError):
+                await self.server.call_tool("get_recent_tool_calls", arguments)
 
 
 if __name__ == "__main__":

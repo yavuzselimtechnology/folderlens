@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import math
 import sqlite3
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 
 from .oauth import _private_permissions
@@ -19,6 +21,34 @@ APPLICATION_ID = int.from_bytes(b"FLTH", "big")
 SCHEMA_VERSION = 1
 SQLITE_PAGE_BYTES = 4096
 MAX_DATABASE_BYTES = 16 * 1024 * 1024
+
+
+def parse_since(value: str | None) -> float | None:
+    """Parse an unambiguous RFC 3339/ISO 8601 instant for history filtering."""
+    if value is None:
+        return None
+    if type(value) is not str or not 1 <= len(value) <= 64:
+        raise ValueError("since must be a timezone-aware RFC 3339 timestamp")
+    normalized = value[:-1] + "+00:00" if value.endswith(("Z", "z")) else value
+    try:
+        parsed = datetime.fromisoformat(normalized)
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            raise ValueError
+        timestamp = parsed.timestamp()
+    except (OSError, OverflowError, ValueError):
+        raise ValueError("since must be a timezone-aware RFC 3339 timestamp") from None
+    if not math.isfinite(timestamp):
+        raise ValueError("since must be a timezone-aware RFC 3339 timestamp")
+    return timestamp
+
+
+def validate_filters(tool_name: str | None, success: bool | None) -> None:
+    if tool_name is not None and (
+        type(tool_name) is not str or not 1 <= len(tool_name) <= 128
+    ):
+        raise ValueError("tool_name must be a non-empty name up to 128 characters")
+    if success is not None and type(success) is not bool:
+        raise ValueError("success must be a boolean")
 
 
 def capture(value) -> dict:
@@ -139,27 +169,46 @@ class ToolHistory:
             self._prune()
 
     def recent(
-        self, limit: int, scopes: set[str], budget: int, before_id: int | None = None
+        self,
+        limit: int,
+        scopes: set[str],
+        budget: int,
+        before_id: int | None = None,
+        since: float | None = None,
+        tool_name: str | None = None,
+        success: bool | None = None,
     ) -> dict:
         if type(limit) is not int or not 1 <= limit <= MAX_RECORDS:
             raise ValueError("Use limit 1..200")
         if before_id is not None and (type(before_id) is not int or before_id < 1):
             raise ValueError("before_id must be a positive history ID")
+        if since is not None and (
+            type(since) not in {int, float} or not math.isfinite(since)
+        ):
+            raise ValueError("since must be a finite Unix timestamp")
+        validate_filters(tool_name, success)
         with self.lock, self.connection:
             self._prune()
             rows = self.connection.execute(
-                "SELECT id,payload FROM calls WHERE (? IS NULL OR id < ?) ORDER BY id DESC LIMIT ?",
-                (before_id, before_id, MAX_RECORDS),
+                "SELECT id,payload FROM calls "
+                "WHERE (? IS NULL OR id < ?) AND (? IS NULL OR time >= ?) "
+                "ORDER BY id DESC LIMIT ?",
+                (before_id, before_id, since, since, MAX_RECORDS),
             ).fetchall()
         selected = []
         eligible = []
         for identity, payload in rows:
             record = json.loads(payload)
-            if set(record["required_scopes"]).issubset(scopes):
-                if self.mode != "content":
-                    record.pop("arguments", None)
-                    record.pop("result", None)
-                eligible.append({**record, "id": identity})
+            if not set(record["required_scopes"]).issubset(scopes):
+                continue
+            if tool_name is not None and record.get("tool") != tool_name:
+                continue
+            if success is not None and record.get("success") is not success:
+                continue
+            if self.mode != "content":
+                record.pop("arguments", None)
+                record.pop("result", None)
+            eligible.append({**record, "id": identity})
 
         def response(records):
             more = len(records) < len(eligible)

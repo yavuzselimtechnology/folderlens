@@ -141,10 +141,13 @@ ayrı disk alanı kullanabilir. Silinen içerik güvenli SQLite silmesiyle temiz
 disk/işletim sistemi yedeklerinde adli silme garantisi verilmez.
 
 `get_recent_tool_calls(limit=20)` en yeni pencereyi kronolojik sırada döndürür.
-`has_more` varsa `next_before_id` değerini `before_id` olarak vererek daha eski
-kayıtlara geçin. `memory` modunda bu imleç yoktur. Her yanıt çıktı bütçesiyle
-sınırlıdır. Yazma/komut kapsamlı kayıtlar etkin yerel izinlere ve varsa mevcut
-OAuth token kapsamlarına göre gizlenir. `metadata` moduna dönmek daha önce
+İsteğe bağlı `since`, açık zaman dilimli RFC 3339/ISO 8601 anıdır;
+`tool_name` tam araç adıyla, `success` ise başarılı/başarısız sonuçla filtreler.
+Bu filtreler birlikte çalışır. `has_more` varsa `next_before_id` değerini
+`before_id` olarak vererek aynı filtrelerle daha eski kayıtlara geçin. `memory`
+modunda bu imleç yoktur. Her yanıt çıktı bütçesiyle sınırlıdır. Yazma/komut
+kapsamlı kayıtlar etkin yerel izinlere ve varsa mevcut OAuth token kapsamlarına
+göre gizlenir. `metadata` moduna dönmek daha önce
 saklanmış içerik alanlarını da araç yanıtından çıkarır; diskteki eski içerik
 kayıt sınırı/süre temizliğine kadar kalabilir.
 

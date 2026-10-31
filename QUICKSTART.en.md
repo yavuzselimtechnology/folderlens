@@ -69,3 +69,8 @@ disabled flags preserve the original immediate start response.
 only the response observed after that input in one call. Its response includes
 `next_offset`, prompt state and optional timing. Invalid wait options are rejected
 before stdin is changed; omitting the options preserves the immediate queued reply.
+
+`get_recent_tool_calls` can combine an inclusive, timezone-aware RFC 3339
+`since` instant with exact `tool_name` and boolean `success` filters. Persistent
+history keeps `before_id` pagination under the same filters; memory history remains
+process-local and does not expose arguments or results.

@@ -18,11 +18,13 @@ import anyio
 from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import CallToolResult, ImageContent, TextContent, ToolAnnotations
+from pydantic import StrictBool
 
 from .oauth import EXEC_SCOPE, READ_SCOPE, WRITE_SCOPE, policy_binding
 from .processes import Processes
 from .remote_calls import CURRENT_CALL, RemoteCalls
 from .system_processes import SystemProcesses
+from .tool_history import parse_since, validate_filters
 from .url_reader import URLReader
 from .workspace import AgentPolicy, Workspace
 
@@ -1166,14 +1168,23 @@ def create_agent(
         )
 
     @tool()
-    def get_recent_tool_calls(limit: int = 20, before_id: int | None = None) -> dict:
+    def get_recent_tool_calls(
+        limit: int = 20,
+        before_id: int | None = None,
+        since: str | None = None,
+        tool_name: str | None = None,
+        success: StrictBool | None = None,
+    ) -> dict:
         """Read chronological history. Persistent content requires owner startup opt-in.
 
         For older persistent pages pass next_before_id; scope-ineligible records are hidden.
+        Filter by timezone-aware RFC 3339 since, exact tool_name and success when needed.
         Captured JSON text prefixes may be truncated. Native media bytes are never stored.
         """
-        if not 1 <= limit <= 200:
+        if type(limit) is not int or not 1 <= limit <= 200:
             raise ValueError("Use limit 1..200")
+        since_timestamp = parse_since(since)
+        validate_filters(tool_name, success)
         if history_store is not None:
             from mcp.server.auth.middleware.auth_context import get_access_token
 
@@ -1186,12 +1197,25 @@ def create_agent(
             if token is not None:
                 scopes.intersection_update(token.scopes)
             return history_store.recent(
-                limit, scopes, workspace.policy.max_output_chars, before_id
+                limit,
+                scopes,
+                workspace.policy.max_output_chars,
+                before_id,
+                since_timestamp,
+                tool_name,
+                success,
             )
         if before_id is not None:
             raise ValueError("before_id requires persistent history")
         with audit_lock:
-            return {"calls": list(history)[-limit:]}
+            filtered = [
+                entry
+                for entry in history
+                if (since_timestamp is None or entry["time"] >= since_timestamp)
+                and (tool_name is None or entry["tool"] == tool_name)
+                and (success is None or entry["success"] is success)
+            ]
+            return {"calls": filtered[-limit:]}
 
     @tool()
     def get_usage_stats() -> dict:
