@@ -295,6 +295,39 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
     async def test_schema_annotations_errors_and_private_audit(self):
         tools = await self.server.list_tools()
         indexed = {tool.name: tool for tool in tools}
+        reference_names = {
+            "create_directory",
+            "edit_block",
+            "force_terminate",
+            "get_config",
+            "get_file_info",
+            "get_more_search_results",
+            "get_recent_tool_calls",
+            "get_tool_result",
+            "get_usage_stats",
+            "interact_with_process",
+            "kill_process",
+            "list_devices",
+            "list_directory",
+            "list_processes",
+            "list_remote_tool_calls",
+            "list_searches",
+            "list_sessions",
+            "move_file",
+            "read_file",
+            "read_multiple_files",
+            "read_process_output",
+            "set_config_value",
+            "shutdown",
+            "start_process",
+            "start_search",
+            "stop_search",
+            "who_am_i",
+            "write_file",
+            "write_pdf",
+        }
+        self.assertEqual(len(indexed), 50)
+        self.assertTrue(reference_names.issubset(indexed))
         self.assertTrue(indexed["read_file"].annotations.read_only_hint)
         self.assertTrue(indexed["write_file"].annotations.destructive_hint)
         self.assertIn("base_sha256", indexed["write_file"].input_schema["required"])

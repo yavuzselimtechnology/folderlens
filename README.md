@@ -12,7 +12,7 @@ dependencies install separately. Generated `downloads/` stays outside Git.
 
 ## Terminal agent for ChatGPT
 
-FolderLens now also has a separate **MCP agent** with 49 tools for files,
+FolderLens now also has a separate **MCP agent** with 50 tools for files,
 paged search, Office/PDF documents, images, Git inspection, managed processes,
 conflict-checked edits, previews, undo and optional private persistent history. The browser
 sharing server below keeps its existing behavior and never gains terminal access.

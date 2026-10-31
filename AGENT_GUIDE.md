@@ -256,7 +256,7 @@ Sunucu kendiliğinden tünel açmaz veya deploy yapmaz; çok cihazlı bulut hesa
 | Değişiklik | `preview_changes` (salt okunur diff), `write_file`, `edit_block`, `create_directory`, `copy_file`, `move_file`, `delete_file`, `undo_change` |
 | Arama | `start_search`, `get_more_search_results`, `list_searches`, `stop_search`; literal/regex metin veya dosya yolu, dosya adı glob, bağlam, erken durdurma |
 | Terminal | `start_process`, `interact_with_process`, `read_process_output`, `force_terminate`, `list_sessions` |
-| Sistem | `get_processes`; PID/ad/durum/bellek/CPU ve süreç oluşturulma kimliği; `kill_process` için kesin kimlik, komut yetkisi ve OS hakları gerekir; komut satırı/kimlik bilgisi döndürülmez |
+| Sistem | `get_processes`, Remote Desktop Commander uyumlu `list_processes`; PID/ad/durum/bellek/CPU ve süreç oluşturulma kimliği; `kill_process` için kesin kimlik, komut yetkisi ve OS hakları gerekir; komut satırı/kimlik bilgisi döndürülmez |
 | Belgeler | `list_workbook_sheets`, `read_workbook`, `write_workbook`, `write_document`, `read_word`, `edit_word`, `edit_word_xml`, `edit_pdf`; Excel sayfaları/hücreleri, belge oluşturma, Word metin/XML ve PDF sayfa düzenleme |
 | Zengin PDF | `write_pdf`, `render_pdf_page`; Markdown/HTML/CSS, tablo, kod, SVG, yerel görsel, A4/Letter ve gerçek sayfa önizlemesi |
 | PDF okuma | `read_pdf`; sayfa bazlı metin pencereleri, gömülü görsel kataloğu ve native görsel çıkarma |
@@ -448,7 +448,10 @@ başlatılamaması oturum çıktısında hata sınıfı ve 127 (bulunamadı) vey
 başarıyla tamamlandığı anlamına gelmez. Bu sahiplik mekanizması işletim sistemi
 kullanıcısının komut yetkisini sandbox'a dönüştürmez.
 
-`get_processes` sayfalı listeye ek olarak `pid` ile tek süreç gözlemi sunar.
+`get_processes` ve aynı güvenli çekirdeği kullanan `list_processes`, sayfalı
+listeye ek olarak `pid` ile tek süreç gözlemi sunar. İkinci ad, Remote Desktop
+Commander istemlerini doğrudan taşımak içindir; ayrı veya daha zayıf bir süreç
+uygulaması değildir.
 Komut satırı/ortam değişkenleri döndürülmez. `cpu_user_seconds`,
 `cpu_system_seconds` ve toplam `cpu_seconds` birikimli sayaçlardır.
 `cpu_percent`, yüksek çözünürlüklü monoton saatle iki gözlem arasından hesaplanır;

@@ -876,6 +876,11 @@ def create_agent(
         """List bounded terminal sessions, statuses and exit codes; no command text is logged."""
         return {"sessions": processes.list_sessions()}
 
+    def process_snapshot(
+        offset: int = 0, limit: int = 100, pid: int | None = None
+    ) -> dict:
+        return system_processes.list(offset, limit, pid)
+
     @tool()
     def get_processes(
         offset: int = 0, limit: int = 100, pid: int | None = None
@@ -885,7 +890,18 @@ def create_agent(
         No command lines/credentials. CPU percent is between observations (100%=one logical CPU);
         first/expired samples are null. Use the exact process_key for kill_process; PIDs are reused.
         """
-        return system_processes.list(offset, limit, pid)
+        return process_snapshot(offset, limit, pid)
+
+    @tool()
+    def list_processes(
+        offset: int = 0, limit: int = 100, pid: int | None = None
+    ) -> dict:
+        """Remote Desktop Commander-compatible process listing with stronger paging and identity.
+
+        This is an alias of get_processes: it additionally supports offset/limit, one-PID lookup,
+        CPU/memory measurements and process_key. Command lines and credentials are never returned.
+        """
+        return process_snapshot(offset, limit, pid)
 
     @tool(read_only=False, destructive=True, open_world=True, oauth_scope=EXEC_SCOPE)
     def kill_process(pid: int, process_key: str, wait_ms: int = 3000) -> dict:

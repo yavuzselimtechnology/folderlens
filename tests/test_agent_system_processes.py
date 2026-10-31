@@ -198,9 +198,18 @@ class SystemProcessTests(unittest.TestCase):
             tools = {tool.name: tool for tool in await server.list_tools()}
             self.assertTrue(tools["kill_process"].annotations.destructive_hint)
             self.assertFalse(tools["kill_process"].annotations.read_only_hint)
+            self.assertEqual(
+                {"offset", "limit", "pid"},
+                set(tools["list_processes"].input_schema["properties"]),
+            )
             observed = await server.call_tool("get_processes", {"pid": child.pid})
             self.assertFalse(observed.is_error)
             record = json.loads(observed.content[0].text)["processes"][0]
+            compatible = await server.call_tool("list_processes", {"pid": child.pid})
+            self.assertFalse(compatible.is_error)
+            compatible_record = json.loads(compatible.content[0].text)["processes"][0]
+            for field in ("pid", "name", "status", "process_key"):
+                self.assertEqual(compatible_record[field], record[field])
             result = await server.call_tool(
                 "kill_process", {"pid": child.pid, "process_key": record["process_key"]}
             )

@@ -136,6 +136,7 @@ class WebIntegrationTests(unittest.TestCase):
             self.assertEqual(len(sections), 10)
             self.assertNotIn("<!--agent-dependencies-->", response.text)
             self.assertIn("mcp==2.3.0", response.text)
+            self.assertIn("50 araç" if lang == "tr" else "50 tools", response.text)
             self.assertEqual(
                 response.content,
                 self.client.get("/AgentArm/agent/", params={"lang": lang}).content,

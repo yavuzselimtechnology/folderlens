@@ -74,3 +74,8 @@ before stdin is changed; omitting the options preserves the immediate queued rep
 `since` instant with exact `tool_name` and boolean `success` filters. Persistent
 history keeps `before_id` pagination under the same filters; memory history remains
 process-local and does not expose arguments or results.
+
+`list_processes` is a Remote Desktop Commander-compatible name for the same
+identity-safe engine as `get_processes`. Unlike a flat process dump, both names
+support paging, one-PID inspection, CPU/memory fields and a PID-reuse-resistant
+`process_key`; neither exposes command lines or environment credentials.
