@@ -308,6 +308,60 @@ class ProcessWaitTests(unittest.TestCase):
 
         asyncio.run(run())
 
+    def test_mcp_interact_wait_returns_only_the_new_repl_response(self):
+        async def run():
+            agent = create_agent(self.processes.workspace.policy)
+            started = await agent.call_tool(
+                "start_process",
+                {
+                    "command": [sys.executable, "-I", "-S", "-q", "-i"],
+                    "wait_ms": 3000,
+                    "wait_for_prompt": True,
+                },
+            )
+            initial = json.loads(started.content[0].text)
+            key = initial["session_id"]
+            try:
+                result = await agent.call_tool(
+                    "interact_with_process",
+                    {
+                        "session_id": key,
+                        "text": "print('one-call-response')\n",
+                        "wait_ms": 3000,
+                        "wait_for_prompt": True,
+                        "verbose_timing": True,
+                    },
+                )
+                self.assertFalse(result.is_error)
+                value = json.loads(result.content[0].text)
+                self.assertTrue(value["queued"])
+                self.assertEqual(value["wait_status"], "prompt_detected")
+                self.assertIn("one-call-response", value["output"])
+                self.assertTrue(value["output"].endswith(">>> "))
+                self.assertFalse(value["output"].startswith(initial["output"]))
+                self.assertGreater(value["next_offset"], initial["next_offset"])
+                self.assertIsNotNone(value["timing"]["first_output_ms"])
+            finally:
+                await agent.call_tool("force_terminate", {"session_id": key})
+
+        asyncio.run(run())
+
+    def test_interact_invalid_wait_does_not_queue_input(self):
+        key = self.processes.start([sys.executable, "-I", "-S", "-q", "-i"])[
+            "session_id"
+        ]
+        try:
+            with patch.object(
+                self.processes.sessions[key].inputs, "put_nowait"
+            ) as enqueue:
+                with self.assertRaisesRegex(ValueError, "wait_ms"):
+                    self.processes.interact(
+                        key, "print('must-not-run')\n", wait_ms=30001
+                    )
+                enqueue.assert_not_called()
+        finally:
+            self.processes.stop(key)
+
     def test_line_windows_preserve_crlf_and_expose_partial_line_byte_cursor(self):
         raw = "one\r\nTürkçe\nlast".encode()
         first = line_window(raw, 0, False, 0, 0, 2, 100, False)

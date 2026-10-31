@@ -496,11 +496,26 @@ class Processes:
             }
 
     def interact(
-        self, session_id: str, text: str = "", close_stdin: bool = False
+        self,
+        session_id: str,
+        text: str = "",
+        close_stdin: bool = False,
+        wait_ms: int = 0,
+        wait_for_prompt: bool = False,
+        verbose_timing: bool = False,
     ) -> dict:
         if not self.workspace.policy.allow_exec:
             raise PermissionError(
                 "Process interaction has been disabled locally or by capability revocation"
+            )
+        if (
+            type(wait_ms) is not int
+            or not 0 <= wait_ms <= 30000
+            or type(wait_for_prompt) is not bool
+            or type(verbose_timing) is not bool
+        ):
+            raise ValueError(
+                "wait_ms must be 0..30000; prompt/timing flags must be booleans"
             )
         session = self.sessions[session_id]
         data = text.encode("utf-8")
@@ -509,6 +524,7 @@ class Processes:
         if session.process.poll() is not None:
             raise ValueError("Session has exited")
         with session.changed:
+            output_start = session.dropped + len(session.output)
             if session.stdin_closed or session.stdin_close_requested:
                 raise ValueError("Session stdin is closed or closing")
             try:
@@ -519,7 +535,19 @@ class Processes:
                 ) from exc
             session.stdin_close_requested = close_stdin
             session.changed.notify_all()
-        return {"queued": True, "closed_stdin": close_stdin}
+        queued = {"queued": True, "closed_stdin": close_stdin}
+        if wait_ms or wait_for_prompt or verbose_timing:
+            return {
+                **queued,
+                **self.read(
+                    session_id,
+                    offset=output_start,
+                    wait_ms=wait_ms,
+                    wait_for_prompt=wait_for_prompt,
+                    verbose_timing=verbose_timing,
+                ),
+            }
+        return queued
 
     def stop(self, session_id: str) -> dict:
         session = self.sessions[session_id]

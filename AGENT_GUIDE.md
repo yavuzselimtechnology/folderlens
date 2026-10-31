@@ -416,6 +416,13 @@ bütçesinin dolduğunu gösterir; timeout yanıtı kısmi çıktı içerebilir.
 yeniden yeni çıktı sayılmaz. Stdin kapanması istendikten sonra istem ipucu
 üretilmez. Tanıma hâlâ sezgiseldir; gerçek OS giriş beklemesi veya PTY değildir.
 
+Girdiyi gönderip cevabı ayrı bir okuma çağrısı olmadan almak için
+`interact_with_process` üzerinde de `wait_ms`, `wait_for_prompt` ve
+`verbose_timing` kullanılabilir. Araç, giriş kuyruğa alınmadan önce seçenekleri
+doğrular ve yalnız bu girişten sonra gözlenen çıktıdan başlar. Yanıttaki
+`next_offset` ile kayıpsız devam edilir. Sıfır bekleme ve kapalı bayraklar önceki
+anlık `queued` yanıtını korur; geçersiz bekleme değeri stdin'e veri göndermez.
+
 `stdin_closed`, `stdin_close_requested`, `stdin_write_in_progress`,
 `stdin_error` ve giriş kuyruğu boyut/kapasitesi gözlenen pipe durumudur.
 Kapanan/kapanması istenmiş stdin'e yeni giriş reddedilir. `prompt_hint` yalnız

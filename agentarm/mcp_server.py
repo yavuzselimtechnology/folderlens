@@ -841,10 +841,28 @@ def create_agent(
 
     @tool(read_only=False, destructive=True, open_world=True, oauth_scope=EXEC_SCOPE)
     def interact_with_process(
-        session_id: str, text: str = "", close_stdin: bool = False
+        session_id: str,
+        text: str = "",
+        close_stdin: bool = False,
+        wait_ms: int = 0,
+        wait_for_prompt: bool = False,
+        verbose_timing: bool = False,
     ) -> dict:
-        """Queue literal stdin text (include newline for line input), or close stdin."""
-        return processes.interact(session_id, text, close_stdin)
+        """Queue literal stdin text or close stdin, optionally returning the response.
+
+        Include a newline for line-oriented input. Optional wait_ms (0..30000) returns only
+        output observed after this input was queued, a recognized prompt when requested, or
+        completion using read_process_output semantics. The response includes next_offset for
+        lossless continuation and optional monotonic timing. Default behavior remains immediate.
+        """
+        return processes.interact(
+            session_id,
+            text,
+            close_stdin,
+            wait_ms,
+            wait_for_prompt,
+            verbose_timing,
+        )
 
     @tool(read_only=False, destructive=True, oauth_scope=EXEC_SCOPE)
     def force_terminate(session_id: str) -> dict:

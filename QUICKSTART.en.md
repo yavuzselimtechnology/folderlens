@@ -64,3 +64,8 @@ to return initial output without a separate read. For a Python REPL, use
 lifetime `timeout_seconds`; a running process continues after the wait expires.
 Continue reading with the returned `next_offset`. The default zero wait and
 disabled flags preserve the original immediate start response.
+
+`interact_with_process` accepts the same three options to send input and return
+only the response observed after that input in one call. Its response includes
+`next_offset`, prompt state and optional timing. Invalid wait options are rejected
+before stdin is changed; omitting the options preserves the immediate queued reply.
