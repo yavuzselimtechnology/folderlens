@@ -57,3 +57,10 @@ Completion time includes process-tree/reader cleanup and stays fixed afterward.
 No output means a null first-output time. Events contain absolute byte ranges,
 sequence numbers and explicit dropped-event counts, without duplicate text.
 These are observed reads, not individual child write calls.
+
+`start_process` also accepts `wait_ms`, `wait_for_prompt`, and `verbose_timing`
+to return initial output without a separate read. For a Python REPL, use
+`wait_ms=3000, wait_for_prompt=true`. This wait is separate from the process
+lifetime `timeout_seconds`; a running process continues after the wait expires.
+Continue reading with the returned `next_offset`. The default zero wait and
+disabled flags preserve the original immediate start response.

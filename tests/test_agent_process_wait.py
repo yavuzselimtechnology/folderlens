@@ -12,6 +12,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import psutil
+from mcp.server.mcpserver.exceptions import ToolError
 
 from agentarm.mcp_server import create_agent
 from agentarm.processes import Processes, Session
@@ -258,6 +259,52 @@ class ProcessWaitTests(unittest.TestCase):
                 )
             finally:
                 await agent.call_tool("force_terminate", {"session_id": key})
+
+        asyncio.run(run())
+
+    def test_mcp_start_wait_returns_prompt_and_continuation_cursor(self):
+        async def run():
+            agent = create_agent(self.processes.workspace.policy)
+            result = await agent.call_tool(
+                "start_process",
+                {
+                    "command": [sys.executable, "-I", "-S", "-q", "-i"],
+                    "wait_ms": 3000,
+                    "wait_for_prompt": True,
+                    "verbose_timing": True,
+                },
+            )
+            self.assertFalse(result.is_error)
+            value = json.loads(result.content[0].text)
+            key = value["session_id"]
+            try:
+                self.assertEqual(value["wait_status"], "prompt_detected")
+                self.assertTrue(value["output"].endswith(">>> "))
+                self.assertIsNotNone(value["timing"]["first_output_ms"])
+                followup = await agent.call_tool(
+                    "read_process_output",
+                    {"session_id": key, "offset": value["next_offset"]},
+                )
+                self.assertEqual(json.loads(followup.content[0].text)["output"], "")
+            finally:
+                await agent.call_tool("force_terminate", {"session_id": key})
+
+        asyncio.run(run())
+
+    def test_mcp_start_invalid_wait_does_not_launch(self):
+        async def run():
+            agent = create_agent(self.processes.workspace.policy)
+            with patch("agentarm.processes.Processes.start") as launch:
+                for wait in (-1, 30001):
+                    with self.assertRaisesRegex(ToolError, "wait_ms"):
+                        await agent.call_tool(
+                            "start_process",
+                            {
+                                "command": [sys.executable, "-c", "pass"],
+                                "wait_ms": wait,
+                            },
+                        )
+                launch.assert_not_called()
 
         asyncio.run(run())
 

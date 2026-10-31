@@ -734,3 +734,11 @@ sonra sabit kalır. Çıktı yoksa first_output_ms null olur. Her olay mutlak by
 aralığı ve sırasını taşır; dropped_events eski olay kaybını bildirir. Olaylar
 çocuk programın write çağrılarıyla birebir değildir; OS pipe okumaları birleşebilir.
 Metin ikinci kez tutulmaz. Varsayılan yanıtta timing alanı yoktur.
+
+İlk çıktıyı ayrı bir çağrı yapmadan almak için `start_process` üzerinde de
+`wait_ms`, `wait_for_prompt` ve `verbose_timing` kullanılabilir. Örneğin Python
+REPL için `wait_ms=3000, wait_for_prompt=true` tanınan isteme kadar bekler.
+Bu bekleme süresi süreç ömrünü belirleyen `timeout_seconds` değerinden ayrıdır;
+süre dolduğunda çalışan iş arka planda devam eder. Dönen `next_offset` ile
+`read_process_output` çağrısına devam edin. Varsayılan `wait_ms=0` ve kapalı
+bayraklar önceki hızlı başlatma yanıtını korur.

@@ -776,14 +776,40 @@ def create_agent(
 
     @tool(read_only=False, destructive=True, open_world=True, oauth_scope=EXEC_SCOPE)
     def start_process(
-        command: list[str], cwd: str = ".", timeout_seconds: float = 300
+        command: list[str],
+        cwd: str = ".",
+        timeout_seconds: float = 300,
+        wait_ms: int = 0,
+        wait_for_prompt: bool = False,
+        verbose_timing: bool = False,
     ) -> dict:
         """Start argv without an implicit shell (explicit --allow-exec). Full OS user privileges.
 
         Supports piped REPLs, not interactive PTY/fullscreen programs. Secret-named environment
         variables are stripped; this does not prevent commands reading files or inherited credentials.
+        Optional wait_ms (0..30000) returns the first output, recognized prompt when requested,
+        or completion using the same semantics as read_process_output. This wait does not change
+        the process lifetime timeout_seconds. Opt-in responses include output/next_offset and
+        optional timing; use next_offset to continue without replaying the initial bytes.
         """
-        return processes.start(command, cwd, timeout_seconds)
+        if (
+            type(wait_ms) is not int
+            or not 0 <= wait_ms <= 30000
+            or type(wait_for_prompt) is not bool
+            or type(verbose_timing) is not bool
+        ):
+            raise ValueError(
+                "wait_ms must be 0..30000; prompt/timing flags must be booleans"
+            )
+        started = processes.start(command, cwd, timeout_seconds)
+        if wait_ms or wait_for_prompt or verbose_timing:
+            return processes.read(
+                started["session_id"],
+                wait_ms=wait_ms,
+                wait_for_prompt=wait_for_prompt,
+                verbose_timing=verbose_timing,
+            )
+        return started
 
     @tool(oauth_scope=EXEC_SCOPE)
     def read_process_output(
